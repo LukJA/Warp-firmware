@@ -77,9 +77,9 @@ enum _gpio_pins
 		kWarpPinUnusedPTB5			= GPIO_MAKE_PIN(HW_GPIOB, 5),
 		kWarpPinUnusedPTB6			= GPIO_MAKE_PIN(HW_GPIOB, 6),
 		kWarpPinUnusedPTB7			= GPIO_MAKE_PIN(HW_GPIOB, 7),
-		kWarpPinUnusedPTB10			= GPIO_MAKE_PIN(HW_GPIOB, 10),
-		kWarpPinUnusedPTB11			= GPIO_MAKE_PIN(HW_GPIOB, 11),
-		kWarpPinUnusedPTB13			= GPIO_MAKE_PIN(HW_GPIOB, 13),
+		kWarpPinUnusedPTB10			= GPIO_MAKE_PIN(HW_GPIOB, 10),  // remapped for SSD1331
+		kWarpPinUnusedPTB11			= GPIO_MAKE_PIN(HW_GPIOB, 11),  // remapped for SSD1331
+		kWarpPinUnusedPTB13			= GPIO_MAKE_PIN(HW_GPIOB, 13),  // remapped for SSD1331
 
 		kWarpPinUnusedPTA5			= GPIO_MAKE_PIN(HW_GPIOA, 5),
 		kWarpPinUnusedPTA6			= GPIO_MAKE_PIN(HW_GPIOA, 6),
@@ -99,9 +99,9 @@ enum _gpio_pins
 		kWarpPinTPS62740_REGCTRL		= GPIO_MAKE_PIN(HW_GPIOB, 5),
 		kWarpPinTPS62740_VSEL4			= GPIO_MAKE_PIN(HW_GPIOB, 6),
 		kWarpPinTPS62740_VSEL3			= GPIO_MAKE_PIN(HW_GPIOB, 7),
-		kWarpPinTPS62740_VSEL2			= GPIO_MAKE_PIN(HW_GPIOB, 10),
-		kWarpPinTPS62740_VSEL1			= GPIO_MAKE_PIN(HW_GPIOB, 11),
-		kWarpPinCLKOUT32K			= GPIO_MAKE_PIN(HW_GPIOB, 13),
+		kWarpPinTPS62740_VSEL2			= GPIO_MAKE_PIN(HW_GPIOB, 10),  // remapped for SSD1331
+		kWarpPinTPS62740_VSEL1			= GPIO_MAKE_PIN(HW_GPIOB, 11),  // remapped for SSD1331
+		kWarpPinCLKOUT32K				= GPIO_MAKE_PIN(HW_GPIOB, 13),  // remapped for SSD1331
 	#endif
 };
 

@@ -67,6 +67,9 @@
 #define							kWarpConstantStringErrorInvalidVoltage	"\rInvalid supply voltage [%d] mV!"
 #define							kWarpConstantStringErrorSanity		"\rSanity check failed!"
 
+#if (WARP_BUILD_ENABLE_DEVSSD1331)
+	#include "devSSD1331.h"
+#endif
 
 #if (WARP_BUILD_ENABLE_DEVADXL362)
 	#include "devADXL362.h"
@@ -1601,6 +1604,14 @@ main(void)
 		blinkLED(kGlauxPinLED);
 		blinkLED(kGlauxPinLED);
 		blinkLED(kGlauxPinLED);
+	#endif
+
+	/* Initialise Custom Devices*/
+	#if (WARP_BUILD_ENABLE_DEVSSD1331)
+		warpPrint("About to initialise OLED... ");
+		devSSD1331init();
+		warpPrint("done.\n");
+		devSSD1331_greenRect();
 	#endif
 
 	/*

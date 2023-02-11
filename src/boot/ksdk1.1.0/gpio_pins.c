@@ -166,7 +166,25 @@ gpio_output_pin_user_config_t	outputPins[] = {
 			.config.driveStrength = kPortLowDriveStrength,
 		},
 	#elif (WARP_BUILD_ENABLE_FRDMKL03)
-
+		// Configure GPIO for OLED SPI control
+		{
+			.pinName = kWarpPinUnusedPTB10,
+			.config.outputLogic = 1,
+			.config.slewRate = kPortFastSlewRate,
+			.config.driveStrength = kPortHighDriveStrength,
+		},
+		{
+			.pinName = kWarpPinUnusedPTB11,
+			.config.outputLogic = 1,
+			.config.slewRate = kPortFastSlewRate,
+			.config.driveStrength = kPortHighDriveStrength,
+		},
+        {
+			.pinName = kWarpPinUnusedPTB13,
+			.config.outputLogic = 1,
+			.config.slewRate = kPortFastSlewRate,
+			.config.driveStrength = kPortHighDriveStrength,
+		},
 	#endif
 
 	{

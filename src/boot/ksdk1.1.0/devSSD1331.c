@@ -24,9 +24,10 @@ enum
 {
 	kSSD1331PinMOSI		= GPIO_MAKE_PIN(HW_GPIOA, 8),
 	kSSD1331PinSCK		= GPIO_MAKE_PIN(HW_GPIOA, 9),
-	kSSD1331PinCSn		= GPIO_MAKE_PIN(HW_GPIOB, 13),
-	kSSD1331PinDC		= GPIO_MAKE_PIN(HW_GPIOA, 12),
-	kSSD1331PinRST		= GPIO_MAKE_PIN(HW_GPIOB, 0),
+	kSSD1331PinCSn		= GPIO_MAKE_PIN(HW_GPIOB, 13), // blue - on = low
+	kSSD1331PinDC		= GPIO_MAKE_PIN(HW_GPIOB, 11), // Green - on = low
+	kSSD1331PinRST		= GPIO_MAKE_PIN(HW_GPIOB, 10), // red - on = low
+	
 };
 
 static int
@@ -77,7 +78,7 @@ devSSD1331init(void)
 	PORT_HAL_SetMuxMode(PORTA_BASE, 8u, kPortMuxAlt3);
 	PORT_HAL_SetMuxMode(PORTA_BASE, 9u, kPortMuxAlt3);
 
-	enableSPIpins();
+	warpEnableSPIpins();
 
 	/*
 	 *	Override Warp firmware's use of these pins.
@@ -85,8 +86,8 @@ devSSD1331init(void)
 	 *	Reconfigure to use as GPIO.
 	 */
 	PORT_HAL_SetMuxMode(PORTB_BASE, 13u, kPortMuxAsGpio);
-	PORT_HAL_SetMuxMode(PORTA_BASE, 12u, kPortMuxAsGpio);
-	PORT_HAL_SetMuxMode(PORTB_BASE, 0u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTB_BASE, 11u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTB_BASE, 10u, kPortMuxAsGpio);
 
 
 	/*
@@ -140,6 +141,11 @@ devSSD1331init(void)
 	writeCommand(0x7D);
 	writeCommand(kSSD1331CommandDISPLAYON);		// Turn on oled panel
 
+	return 0;
+}
+
+int 
+devSSD1331_greenRect(void){
 	/*
 	 *	To use fill commands, you will have to issue a command to the display to enable them. See the manual.
 	 */
@@ -156,13 +162,18 @@ devSSD1331init(void)
 	writeCommand(0x3F);
 
 
-
-	/*
-	 *	Any post-initialization drawing commands go here.
-	 */
-	//...
-
-
+		/* Green Rectangle*/
+	writeCommand(kSSD1331CommandDRAWRECT);
+	writeCommand(0); // x0 (7 bit)
+	writeCommand(0); // y0 (6 bit)
+	writeCommand(95); // x1 (7 bit)
+	writeCommand(63); // y1 (6 bit)
+	writeCommand(0x00); // Outline R (5 bit)
+	writeCommand(0xFF); // Outline G (6 bit)
+	writeCommand(0x00); // Outline B (5 bit)
+	writeCommand(0x00); // Fill R (5 bit)
+	writeCommand(0xFF); // Fill G (6 bit)
+	writeCommand(0x00); // Fill B (5 bit)
 
 	return 0;
 }
