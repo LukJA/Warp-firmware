@@ -134,6 +134,7 @@
 
 	// Generic Config Flags
 	#define		WARP_BUILD_ENABLE_DEVSSD1331		1
+	#define		WARP_BUILD_ENABLE_DEVINA219			1
 
 typedef enum
 {

@@ -71,6 +71,10 @@
 	#include "devSSD1331.h"
 #endif
 
+#if (WARP_BUILD_ENABLE_DEVINA219)
+	#include "devINA219.h"
+#endif
+
 #if (WARP_BUILD_ENABLE_DEVADXL362)
 	#include "devADXL362.h"
 	volatile WarpSPIDeviceState			deviceADXL362State;
@@ -1613,6 +1617,26 @@ main(void)
 		warpPrint("done.\n");
 		devSSD1331_greenRect();
 	#endif
+
+	#if (WARP_BUILD_ENABLE_DEVINA219)
+		warpPrint("About to configure INA219...\n");
+		if (!initINA219()){
+			warpPrint("Init Passed.\n");
+			warpPrint("Bus Voltage: %d mV\n", getBusVoltagemVINA219());
+			warpPrint("Shunt Voltage: %d uV\n", getShuntVoltageuVINA219());
+			OSA_TimeDelay(2000);
+			warpPrint("Current: %d mA\n", getCurrentmAINA219());
+			warpPrint("Power: %d mW\n", getPowermWINA219());
+		}else{
+			warpPrint("Init Failed.\n");
+		}		
+	#endif
+
+
+	#if (WARP_BUILD_ENABLE_DEVINA219)
+		get1000Currents();
+	#endif
+
 
 	/*
 	 *	Initialize all the sensors
