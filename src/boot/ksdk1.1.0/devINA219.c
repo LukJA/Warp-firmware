@@ -1,5 +1,5 @@
 /*!
- * Heavily modified implementation of the Adafruit INA219 Arduino Library
+ * Implementation inspired by the Adafruit INA219 Arduino Library
  *
  * BSD license, all text here must be included in any redistribution.
  *
@@ -65,9 +65,9 @@ uint32_t readRegisterINA219(uint8_t deviceRegister, int numberOfBytes)
     return 0;
 }
 
-uint32_t writeRegisterINA218(uint8_t deviceRegister, uint16_t payload)
+uint32_t writeRegisterINA219(uint8_t deviceRegister, uint16_t payload)
 {
-    uint8_t payloadByte[1], commandByte[1];
+    uint8_t payloadByte[2], commandByte[1];
     i2c_status_t status;
 
     i2c_device_t slave =
@@ -137,7 +137,7 @@ uint32_t initINA219()
     ina219_powerMultiplier_uW = 200; // Power LSB = 1mW per bit (2/1)
 
     // Set Calibration register to 'Cal' calculated above
-    status += writeRegisterINA218(INA219_REG_CALIBRATION, ina219_calValue);
+    status += writeRegisterINA219(INA219_REG_CALIBRATION, ina219_calValue);
 
     // Set Config register to take into account the settings above + others
     uint16_t config = INA219_CONFIG_BVOLTAGERANGE_16V |        // 16V Full-Scale Bus Range
@@ -146,7 +146,7 @@ uint32_t initINA219()
                       INA219_CONFIG_SADCRES_12BIT_1S_532US |   // 1 x 12-bit shunt sample
                       INA219_CONFIG_MODE_SANDBVOLT_CONTINUOUS; // shunt and bus voltage continuous
 
-    status += writeRegisterINA218(INA219_REG_CONFIG, config);
+    status += writeRegisterINA219(INA219_REG_CONFIG, config);
     
     // wait for the registers to be properly set
     OSA_TimeDelay(100); 
