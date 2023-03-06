@@ -44,3 +44,5 @@ typedef enum
 
 int	devSSD1331init(void);
 int devSSD1331_greenRect(void);
+int devSSD1331_displayFrameBuffer(void);
+int devSSD1331_clearScreen(void);

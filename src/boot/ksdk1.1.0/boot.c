@@ -183,6 +183,10 @@
 	volatile WarpUARTDeviceState			deviceBGXState;
 #endif
 
+#if (WARP_BUILD_ENABLE_RECOG)
+	#include "recog.h"
+#endif
+
 
 volatile i2c_master_state_t				i2cMasterState;
 volatile spi_master_state_t				spiMasterState;
@@ -1616,6 +1620,10 @@ main(void)
 		devSSD1331init();
 		warpPrint("done.\n");
 		devSSD1331_greenRect();
+		OSA_TimeDelay(2000);
+		devSSD1331_clearScreen();
+		devSSD1331_displayFrameBuffer();
+		while(1){};
 	#endif
 
 	#if (WARP_BUILD_ENABLE_DEVINA219)
@@ -1637,6 +1645,13 @@ main(void)
 		get1000Currents();
 	#endif
 
+	warpPrint("Starting Recognition...\n");
+	recog_init();
+	warpPrint("Looping\n");
+	recog();
+	warpPrint("Done\n");
+
+	while(1) {}
 
 	/*
 	 *	Initialize all the sensors

@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "stdlib.h": "c",
+        "devina219.h": "c",
+        "fsl_spi_master_driver.h": "c",
+        "devssd1331.h": "c",
+        "cstddef": "c",
+        "fsl_gpio_driver.h": "c"
+    }
+}

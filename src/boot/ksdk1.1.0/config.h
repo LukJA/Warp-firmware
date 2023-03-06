@@ -133,8 +133,10 @@
 #endif
 
 	// Generic Config Flags
-	#define		WARP_BUILD_ENABLE_DEVSSD1331		1
-	#define		WARP_BUILD_ENABLE_DEVINA219			1
+	// #define		WARP_BUILD_ENABLE_DEVSSD1331		1
+	// #define		WARP_BUILD_ENABLE_DEVINA219			1
+	#define		WARP_BUILD_ENABLE_RECOG				1
+
 
 typedef enum
 {
@@ -160,7 +162,7 @@ typedef enum
 	*/
 	kWarpDefaultPrintBufferSizeBytes			= 64,
 	kWarpMemoryCommonSpiBufferBytes				= 64,
-	kWarpSizesI2cBufferBytes				= 4,
+	kWarpSizesI2cBufferBytes				= 6,
 	kWarpSizesSpiBufferBytes				= 7,
 	kWarpSizesUartBufferBytes				= 8,
 	kWarpSizesBME680CalibrationValuesCount			= 41,

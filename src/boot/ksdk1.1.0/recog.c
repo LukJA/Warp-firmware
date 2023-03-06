@@ -1,0 +1,442 @@
+#include "config.h"
+#include "warp.h"
+#include "devMMA8451Q.h"
+#include "fsl_gpio_driver.h"
+
+#include "recog.h"
+
+extern volatile WarpI2CDeviceState	deviceMMA8451QState;
+
+// Windows
+#define W_SCALE 6
+#define W_SIZE ((1 << W_SCALE) - 1) // 63
+uint8_t window_count = 0;
+
+int16_t AX, AY, AZ = 0;
+// Feature Rollings
+// E(X)LP E(Y)LP E(Z)LP	
+// E(X)HP E(Y)HP E(Z)HP	
+// VarHPX VarHPY VarHPZ	
+// MinMaxX MinMaxY MinMax Z
+
+// LP_n = 0.02*X_n + 0.98 * LP_n-1
+// 128 LP_n = 2*X_n + 126 * LP_n-1
+// HP_n = X_n - LP_n 
+int16_t X_LP, X_HP = 0;
+int16_t Y_LP, Y_HP = 0;
+int16_t Z_LP, Z_HP = 0;
+
+int32_t EX_LP, EX_HP, EX_HP2 = 0;
+int32_t EY_LP, EY_HP, EY_HP2 = 0;
+int32_t EZ_LP, EZ_HP, EZ_HP2 = 0;
+
+int16_t X_min, X_max = 0;
+int16_t Y_min, Y_max = 0;
+int16_t Z_min, Z_max = 0;
+
+int32_t X_var, Y_var, Z_var = 0;
+int32_t X_minmax, Y_minmax, Z_minmax = 0;
+
+// Classifier Parameters
+int32_t nij_0_p_X = -9800;
+int32_t var_0_X[] = {70, 58, 303, 29, 36, 198, 193741477, 3573031648, 456152684, 13091, 123514, 25870};
+int32_t theta_0[] = {417, 1942, 369, 7, -1, 41, 193725, 789767, 293892, 1776, 4877, 2296};
+int32_t nij_1_p_X = -8500;
+int32_t var_1_X[] = {5, 16, 45, 16, 27, 40, 26542227, 122843599, 31984217, 1428, 1599, 1394};
+int32_t theta_1[] = {281, 2034, 115, 4, 0, -18, 149361, 348297, 201780, 1998, 2700, 2135};
+
+// PMAP index/100 corresponds to probabilty bounded by value
+const int32_t pmap[] = {-460, -391, -350, -321, -299, -281, -265, -252, -240, // 0.01 to 0.09
+                        -230, -220, -212, -204, -196, -189, -183, -177, -171, -166, // 0.1 to 0.19
+                        -160, -156, -151, -146, -142, -138, -134, -130, -127, -123, // 0.20 to 0.29
+                        -120, -117, -113, -110, -107, -104, -102, -99, -96, -94, // 0.30 to 0.39
+                        -91, -89, -86, -84, -82, -79, -77, -75, -73, -71, // 0.40 to 0.49
+                        -69, -67, -65, -63, -61, -59, -57, -56, -54, -52, // 0.50 to 0.59
+                        -51, -49, -47, -46, -44, -43, -41, -40, -38, -37, // 0.60 to 0.69
+                        -35, -34, -32, -31, -30, -28, -27, -26, -24, -23, // 0.70 to 0.79
+                        -22, -21, -19, -18, -17, -16, -15, -13, -12, -11, // 0.80 to 0.89
+                        -10, -9, -8, -7, -6, -5, -4, -3, -2, -1};// 0.90 to 0.99
+
+enum {
+	BLED	= GPIO_MAKE_PIN(HW_GPIOB, 13), // blue - on = low
+	GLED	= GPIO_MAKE_PIN(HW_GPIOB, 11), // Green - on = low
+	RLED	= GPIO_MAKE_PIN(HW_GPIOB, 10), // red - on = low
+};
+
+inline int redOn(void){
+    GPIO_DRV_ClearPinOutput(RLED);
+    return 0;
+}
+inline int redOff(void){
+    GPIO_DRV_SetPinOutput(RLED);
+    return 0;
+}
+inline int greenOn(void){
+    GPIO_DRV_ClearPinOutput(GLED);
+    return 0;
+}
+inline int greenOff(void){
+    GPIO_DRV_SetPinOutput(GLED);
+    return 0;
+}
+inline int blueOn(void){
+    GPIO_DRV_ClearPinOutput(BLED);
+    return 0;
+}
+inline int blueOff(void){
+    GPIO_DRV_SetPinOutput(BLED);
+    return 0;
+}
+
+// return the post-point log probability value 0.XX
+int32_t pmap_output(int32_t x){
+    for (int i = 99; i >= 0; i--){
+        if (x >= pmap[i]) return i;
+    }
+    return 0;
+}
+
+inline int32_t divideBy128_32(int32_t* x){
+    if (((*x) & 0b111111) > 0b100000) { // RUP
+        (*x) = ((*x) >> 7) + 1;
+    }
+    else{
+        (*x) = ((*x) >> 7);
+    }
+    return 0;
+}
+
+inline int32_t divideBy128_26(int16_t* x){
+    if (((*x) & 0b111111) > 0b100000) { // RUP
+        (*x) = ((*x) >> 7) + 1;
+    }
+    else{
+        (*x) = ((*x) >> 7);
+    }
+    return 0;
+}
+
+#define CA 2
+#define CB (128-CA)
+
+int process_features(void){
+    // ====== FILTERING =======
+    // 128 LP_n = 2*X_n + 126 * LP_n-1
+    X_LP = (CA*AX + CB*X_LP)/128;
+    // // accelerated rounded divide
+    // if ((X_LP & 0b111111) > 0b100000) { // RUP
+    //     X_LP = (X_LP >> 6) + 1;
+    // }
+    // else{
+    //     X_LP = (X_LP >> 6);
+    // }
+    X_HP = AX-X_LP;
+
+    // 128 LP_n = 2*X_n + 126 * LP_n-1
+    Y_LP = (CA*AY + CB*Y_LP)/128;
+    // // accelerated rounded divide
+    // if ((Y_LP & 0b111111) > 0b100000) { // RUP
+    //     Y_LP = (Y_LP >> 6) + 1;
+    // }
+    // else{
+    //     Y_LP = (Y_LP >> 6);
+    // }
+    Y_HP = AY-Y_LP;
+
+    // 128 LP_n = 2*X_n + 126 * LP_n-1
+    Z_LP = (CA*AZ + CB*Z_LP)/128;
+    // accelerated rounded divide
+    // if ((Z_LP & 0b111111) > 0b100000) { // RUP
+    //     Z_LP = (Z_LP >> 6) + 1;
+    // }
+    // else{
+    //     Z_LP = (Z_LP >> 6);
+    // }
+    Z_HP = AZ-Z_LP;
+
+    // ====== ACCUMULATE MEANS =======
+    EX_LP += X_LP;
+    EX_HP += X_HP;
+    EX_HP2 += X_HP*X_HP;
+    EY_LP += Y_LP;
+    EY_HP += Y_HP;
+    EY_HP2 += Y_HP*Y_HP;
+    EZ_LP += Z_LP;
+    EZ_HP += Z_HP;
+    EZ_HP2 += Z_HP*Z_HP;
+
+    // ====== MANAGE MINMAX =======
+    if (X_HP > X_max || X_max == 0){
+        X_max = X_HP;
+    }
+    else if (X_HP < X_min || X_min == 0){
+        X_min = X_HP;
+    }
+    if (Y_HP > Y_max || Y_max == 0){
+        Y_max = Y_HP;
+    }
+    else if (Y_HP < Y_min || Y_min == 0){
+        Y_min = Y_HP;
+    }
+    if (Z_HP > Z_max || Z_max == 0){
+        Z_max = Z_HP;
+    }
+    else if (Z_HP < Z_min || Z_min == 0){
+        Z_min = Z_HP;
+    }
+
+    window_count++;
+    return 0;
+}
+
+int final_features(void){
+    // ====== DIVIDE MEANS =======
+    // if ((EX_LP & 0b111111) > 0b100000) { // RUP
+    //     EX_LP = (EX_LP >> 6) + 1;
+    // }
+    // else{
+    //     EX_LP = (EX_LP >> 6);
+    // }
+    // if ((EY_LP & 0b111111) > 0b100000) { // RUP
+    //     EY_LP = (EY_LP >> 6) + 1;
+    // }
+    // else{
+    //     EY_LP = (EY_LP >> 6) + 1;
+    // }
+    // if ((EZ_LP & 0b111111) > 0b100000) { // RUP
+    //     EZ_LP = (EZ_LP >> 6) + 1;
+    // }
+    // else{
+    //     EZ_LP = (EZ_LP >> 6);
+    // }
+    // divideBy128_32(&EX_HP);
+    // divideBy128_32(&EX_HP2);
+    // divideBy128_32(&EY_HP);
+    // divideBy128_32(&EY_HP2);
+    // divideBy128_32(&EZ_HP);
+    // divideBy128_32(&EZ_HP2);
+
+    EX_LP /= 64;
+    EY_LP /= 64;
+    EZ_LP /= 64;
+    EX_HP /= 64;
+    EY_HP /= 64;
+    EZ_HP /= 64;
+    EX_HP2 /= 64;
+    EY_HP2 /= 64;
+    EZ_HP2 /= 64;
+
+
+    // ===== GEN VARIANCES =====
+    X_var = EX_HP2 - EX_HP*EX_HP;
+    Y_var = EY_HP2 - EY_HP*EY_HP;
+    Z_var = EZ_HP2 - EZ_HP*EZ_HP;
+
+    // ===== COMPUTE MINMAX =====
+    X_minmax = X_max = X_min;
+    Y_minmax = Y_max = Y_min;
+    Z_minmax = Z_max = Z_min;
+
+    return 0;
+}
+
+int make_prediction(void){
+    // Generate Prediction
+
+    // Feature Rollings
+    // E(X)LP E(Y)LP E(Z)LP	
+    // E(X)HP E(Y)HP E(Z)HP	
+    // VarHPX VarHPY VarHPZ	
+    // MinMaxX MinMaxY MinMax Z
+    int32_t X[12] = {EX_LP, EY_LP, EZ_LP,
+                    EX_HP, EY_HP, EZ_HP,
+                    X_var, Y_var, Z_var,
+                    X_minmax, Y_minmax, Z_minmax};
+
+    int32_t n_ij_0 = 0;
+    for (int i = 0; i < 12; i++){
+        n_ij_0 += ((X[i] - theta_0[i])*(X[i] - theta_0[i]))/var_0_X[i];
+    }
+    n_ij_0 = nij_0_p_X -0.5*n_ij_0;
+    
+    int32_t n_ij_1 = 0;
+    for (int i = 0; i < 12; i++){
+        n_ij_1 += ((X[i] - theta_1[i])*(X[i] - theta_1[i]))/var_1_X[i];
+    }
+    n_ij_1 = nij_1_p_X -0.5*n_ij_1;
+
+    int32_t p_walk_log = 0;
+    if (n_ij_1 > n_ij_0){
+        p_walk_log = n_ij_1 - n_ij_1;
+    }
+    else
+    {
+        p_walk_log = n_ij_1 - n_ij_0;
+    }
+
+    int p_dec = pmap_output(p_walk_log);
+    warpPrint("%d: 0.%2d", p_walk_log, p_dec);
+
+
+    if (p_dec > 90) { // .9 
+        greenOn();
+        redOff();
+        blueOff();
+    }
+    else if (p_dec > 50){
+        blueOn();
+        greenOff();
+        redOff();
+    }
+    else if (p_dec > 10){
+        redOn();
+        greenOff();
+        blueOff();
+    }
+    else{
+        greenOff();
+        redOff();
+        blueOff();
+    }
+
+    // clean up the window variables
+
+    if (p_walk_log > -69) return 1;
+    return 0;
+}
+
+
+int readAccelData(void){
+    uint16_t state = readSensorRegisterMMA8451Q(kWarpSensorOutputRegisterMMA8451QOUT_X_MSB, 6);
+	uint16_t MSBX = deviceMMA8451QState.i2cBuffer[0];
+	uint16_t LSBX = deviceMMA8451QState.i2cBuffer[1];
+    uint16_t MSBY = deviceMMA8451QState.i2cBuffer[2];
+	uint16_t LSBY = deviceMMA8451QState.i2cBuffer[3];
+    uint16_t MSBZ = deviceMMA8451QState.i2cBuffer[4];
+	uint16_t LSBZ = deviceMMA8451QState.i2cBuffer[5];
+	int16_t sigmaX  = ((MSBX & 0xFF) << 6) | (LSBX >> 2); // combine
+	int16_t sigmaY  = ((MSBY & 0xFF) << 6) | (LSBY >> 2); // combine
+	int16_t sigmaZ  = ((MSBZ & 0xFF) << 6) | (LSBZ >> 2); // combine
+    AX = (sigmaX ^ (1 << 13)) - (1 << 13); // sign extend
+    AY = (sigmaY ^ (1 << 13)) - (1 << 13); // sign extend
+    AZ = (sigmaZ ^ (1 << 13)) - (1 << 13); // sign extend
+    return state;
+}
+
+int recog_init(void){
+    initMMA8451Q(0x1D, kWarpDefaultSupplyVoltageMillivoltsMMA8451Q);
+
+    // disable and re-enable the chip
+    uint8_t F_SET = 0;
+    uint8_t CTRL_SET = 0;
+    // F_SET    = F_MODE_DISABLED;
+    // CTRL_SET = CTRL1_STANDBY;
+    // configureSensorMMA8451Q(F_SET, CTRL_SET);
+
+    // Configure Dynamic Range
+    writeSensorRegisterMMA8451Q(XYZ_DATA_CFG_REG, XYZ_DATA_CFG_FS4G);
+
+    // Set F_SETUP, CTRL_1
+    CTRL_SET = CTRL1_ACTIVE | CTRL1_RNORMAL | CTRL1_ODR_50;
+    configureSensorMMA8451Q(F_SET, CTRL_SET);
+
+    warpPrint("Read ID: %d\n", readSensorRegisterMMA8451Q(0x0D, 1));
+	uint16_t WHOAMI = deviceMMA8451QState.i2cBuffer[0];
+    if (WHOAMI != 0x1A){
+        warpPrint("WARN === MMA WHOAMI Failed - 0x%02x\n", WHOAMI);
+        return 1;
+    }
+    warpPrint("MMA init complete - 0x1A\n");
+    OSA_TimeDelay(200);
+
+	PORT_HAL_SetMuxMode(PORTB_BASE, 13u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTB_BASE, 11u, kPortMuxAsGpio);
+	PORT_HAL_SetMuxMode(PORTB_BASE, 10u, kPortMuxAsGpio);
+
+    GPIO_DRV_ClearPinOutput(BLED);
+    GPIO_DRV_ClearPinOutput(GLED);
+    GPIO_DRV_ClearPinOutput(RLED);
+
+    OSA_TimeDelay(200);
+
+    GPIO_DRV_SetPinOutput(BLED);
+    GPIO_DRV_SetPinOutput(GLED);
+    GPIO_DRV_SetPinOutput(RLED);
+
+    return 0;
+}
+
+int recog(void){
+    while(1) {
+        // Has a full window been completed?
+        if (window_count == 63){
+            window_count = 0;
+            // compute final features
+            final_features();
+            //warpPrint("- %d %d %d , %d %d %d \n", AX, AY, AZ, X_LP, Y_LP, Z_LP);
+            warpPrint("%d %d %d %d %d %d %d %d %d %d %d %d\n", EX_LP, EY_LP, EZ_LP, EX_HP, EY_HP, EZ_HP, X_var, Y_var, Z_var, X_minmax, Y_minmax, Z_minmax);
+            // make prediction
+            make_prediction();
+            // cleanup
+            X_LP = X_HP = AX;
+            Y_LP = Y_HP = AY;
+            Z_LP = Z_HP = AZ;
+
+            EX_LP = EX_HP = EX_HP2 = 0;
+            EY_LP = EY_HP = EY_HP2 = 0;
+            EZ_LP = EZ_HP = EZ_HP2 = 0;
+
+            X_min = X_max = 0;
+            Y_min = Y_max = 0;
+            Z_min = Z_max = 0;
+
+            X_var = Y_var = Z_var = 0;
+            X_minmax = Y_minmax = Z_minmax = 0;
+        }
+        
+        // poll the data-ready reg for XYZ ready (0x07)
+        readSensorRegisterMMA8451Q(0x00, 1);
+        if (((uint8_t)deviceMMA8451QState.i2cBuffer[0] & 0x07) == 0x07){
+            readSensorRegisterMMA8451Q(0x01, 6);
+            uint16_t MSBX = deviceMMA8451QState.i2cBuffer[0];
+            uint16_t LSBX = deviceMMA8451QState.i2cBuffer[1];
+            uint16_t MSBY = deviceMMA8451QState.i2cBuffer[2];
+            uint16_t LSBY = deviceMMA8451QState.i2cBuffer[3];
+            uint16_t MSBZ = deviceMMA8451QState.i2cBuffer[4];
+            uint16_t LSBZ = deviceMMA8451QState.i2cBuffer[5];
+            int16_t sigmaX  = ((MSBX & 0xFF) << 6) | (LSBX >> 2); // combine
+            int16_t sigmaY  = ((MSBY & 0xFF) << 6) | (LSBY >> 2); // combine
+            int16_t sigmaZ  = ((MSBZ & 0xFF) << 6) | (LSBZ >> 2); // combine
+            AX = (sigmaX ^ (1 << 13)) - (1 << 13); // sign extend
+            AY = (sigmaY ^ (1 << 13)) - (1 << 13); // sign extend
+            AZ = (sigmaZ ^ (1 << 13)) - (1 << 13); // sign extend
+            process_features();
+        }
+    }
+}
+
+int loopAndPrint(void){
+    while(1){
+        // poll the data-ready reg
+        readSensorRegisterMMA8451Q(0x00, 1);
+	    uint8_t dataReady = deviceMMA8451QState.i2cBuffer[0];
+        if ((dataReady & 0x07) == 0x07){
+            readSensorRegisterMMA8451Q(kWarpSensorOutputRegisterMMA8451QOUT_X_MSB, 6);
+            uint16_t MSBX = deviceMMA8451QState.i2cBuffer[0];
+            uint16_t LSBX = deviceMMA8451QState.i2cBuffer[1];
+            uint16_t MSBY = deviceMMA8451QState.i2cBuffer[2];
+            uint16_t LSBY = deviceMMA8451QState.i2cBuffer[3];
+            uint16_t MSBZ = deviceMMA8451QState.i2cBuffer[4];
+            uint16_t LSBZ = deviceMMA8451QState.i2cBuffer[5];
+            int16_t sigmaX  = ((MSBX & 0xFF) << 6) | (LSBX >> 2); // combine
+            int16_t sigmaY  = ((MSBY & 0xFF) << 6) | (LSBY >> 2); // combine
+            int16_t sigmaZ  = ((MSBZ & 0xFF) << 6) | (LSBZ >> 2); // combine
+            AX = (sigmaX ^ (1 << 13)) - (1 << 13); // sign extend
+            AY = (sigmaY ^ (1 << 13)) - (1 << 13); // sign extend
+            AZ = (sigmaZ ^ (1 << 13)) - (1 << 13); // sign extend
+            warpPrint("%d,%d,%d\n", AX, AY, AZ);
+        }else{
+            //warpPrint(".\n");
+        }
+    }
+}
