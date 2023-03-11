@@ -1,0 +1,25 @@
+diff --git a/src/boot/ksdk1.1.0/config.h b/src/boot/ksdk1.1.0/config.h
+index 26859fb..3377637 100644
+--- a/src/boot/ksdk1.1.0/config.h
++++ b/src/boot/ksdk1.1.0/config.h
+@@ -133,7 +133,10 @@
+ #endif
+ 
+ 	// Generic Config Flags
+-	#define		WARP_BUILD_ENABLE_DEVSSD1331		1
++	// #define		WARP_BUILD_ENABLE_DEVSSD1331		1
++	// #define		WARP_BUILD_ENABLE_DEVINA219			1
++	#define		WARP_BUILD_ENABLE_RECOG				1
++
+ 
+ typedef enum
+ {
+@@ -159,7 +162,7 @@ typedef enum
+ 	*/
+ 	kWarpDefaultPrintBufferSizeBytes			= 64,
+ 	kWarpMemoryCommonSpiBufferBytes				= 64,
+-	kWarpSizesI2cBufferBytes				= 4,
++	kWarpSizesI2cBufferBytes				= 6,
+ 	kWarpSizesSpiBufferBytes				= 7,
+ 	kWarpSizesUartBufferBytes				= 8,
+ 	kWarpSizesBME680CalibrationValuesCount			= 41,

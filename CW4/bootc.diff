@@ -1,0 +1,66 @@
+diff --git a/src/boot/ksdk1.1.0/boot.c b/src/boot/ksdk1.1.0/boot.c
+index 4c18c0b..713546e 100644
+--- a/src/boot/ksdk1.1.0/boot.c
++++ b/src/boot/ksdk1.1.0/boot.c
+@@ -71,6 +71,10 @@
+ 	#include "devSSD1331.h"
+ #endif
+ 
++#if (WARP_BUILD_ENABLE_DEVINA219)
++	#include "devINA219.h"
++#endif
++
+ #if (WARP_BUILD_ENABLE_DEVADXL362)
+ 	#include "devADXL362.h"
+ 	volatile WarpSPIDeviceState			deviceADXL362State;
+@@ -179,6 +183,10 @@
+ 	volatile WarpUARTDeviceState			deviceBGXState;
+ #endif
+ 
++#if (WARP_BUILD_ENABLE_RECOG)
++	#include "recog.h"
++#endif
++
+ 
+ volatile i2c_master_state_t				i2cMasterState;
+ volatile spi_master_state_t				spiMasterState;
+@@ -1612,8 +1620,39 @@ main(void)
+ 		devSSD1331init();
+ 		warpPrint("done.\n");
+ 		devSSD1331_greenRect();
++		OSA_TimeDelay(2000);
++		devSSD1331_clearScreen();
++		devSSD1331_displayFrameBuffer();
++		while(1){};
++	#endif
++
++	#if (WARP_BUILD_ENABLE_DEVINA219)
++		warpPrint("About to configure INA219...\n");
++		if (!initINA219()){
++			warpPrint("Init Passed.\n");
++			warpPrint("Bus Voltage: %d mV\n", getBusVoltagemVINA219());
++			warpPrint("Shunt Voltage: %d uV\n", getShuntVoltageuVINA219());
++			OSA_TimeDelay(2000);
++			warpPrint("Current: %d mA\n", getCurrentmAINA219());
++			warpPrint("Power: %d mW\n", getPowermWINA219());
++		}else{
++			warpPrint("Init Failed.\n");
++		}		
+ 	#endif
+ 
++
++	#if (WARP_BUILD_ENABLE_DEVINA219)
++		get1000Currents();
++	#endif
++
++	warpPrint("Starting Recognition...\n");
++	recog_init();
++	warpPrint("Looping\n");
++	recog();
++	warpPrint("Done\n");
++
++	while(1) {}
++
+ 	/*
+ 	 *	Initialize all the sensors
+ 	 */

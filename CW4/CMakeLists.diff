@@ -1,0 +1,13 @@
+diff --git a/src/boot/ksdk1.1.0/CMakeLists-FRDMKL03.txt b/src/boot/ksdk1.1.0/CMakeLists-FRDMKL03.txt
+index f49282c..c9ed7aa 100644
+--- a/src/boot/ksdk1.1.0/CMakeLists-FRDMKL03.txt
++++ b/src/boot/ksdk1.1.0/CMakeLists-FRDMKL03.txt
+@@ -93,8 +93,9 @@ ADD_EXECUTABLE(Warp
+     "${ProjDirPath}/../../src/errstrsEN.c"
+     "${ProjDirPath}/../../src/powermodes.c"
+     "${ProjDirPath}/../../src/devMMA8451Q.c"
++    "${ProjDirPath}/../../src/recog.c"
+     "${ProjDirPath}/../../src/SEGGER_RTT.c"
+     "${ProjDirPath}/../../src/SEGGER_RTT_printf.c"
+     "${ProjDirPath}/../../../../platform/drivers/src/i2c/fsl_i2c_irq.c"
+
